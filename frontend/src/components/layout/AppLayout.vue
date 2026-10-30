@@ -238,15 +238,18 @@
                   </router-link>
                 </div>
 
-                <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                <div class="max-h-96 overflow-y-auto divide-y divide-slate-100">
                   <div
-                    v-for="notif in roleNotifications.slice(0, 5)"
+                    v-for="notif in roleNotifications.slice(0, 8)"
                     :key="notif.id"
                     :class="[notif.isRead ? 'bg-white' : 'bg-blue-50/40', 'p-3 hover:bg-slate-50 transition-colors cursor-pointer']"
                     @click="handleNotificationClick(notif)"
                   >
                     <div class="flex items-start justify-between gap-2">
-                      <p class="text-xs font-semibold text-slate-900 leading-tight">{{ notif.title }}</p>
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span v-if="!notif.isRead" class="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                        <p class="text-xs font-semibold text-slate-900 leading-tight truncate">{{ notif.title }}</p>
+                      </div>
                       <span class="text-[10px] text-slate-400 whitespace-nowrap">{{ notif.time }}</span>
                     </div>
                     <p class="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">{{ notif.message }}</p>
@@ -498,6 +501,7 @@ const navGroups = computed(() => {
       {
         title: 'Keuangan & Pembayaran',
         items: [
+          { label: 'Data Supplier', path: '/finance/suppliers', icon: Truck },
           { label: 'Transaksi Pembelian', path: '/finance/purchases', icon: ShoppingBag },
           { label: 'Invoice', path: '/finance/invoices', icon: Receipt },
           { label: 'Pembayaran (Penuh & Termin)', path: '/finance/payments', icon: CreditCard },
@@ -526,6 +530,24 @@ const navGroups = computed(() => {
     ];
   }
 
+  if (role === 'SUPPLIER') {
+    return [
+      {
+        title: 'Portal Vendor & Supplier',
+        items: [
+          { label: 'Portal Vendor Rekanan', path: '/supplier/portal', icon: Truck },
+        ],
+      },
+      {
+        title: 'Akun',
+        items: [
+          { label: 'Notifikasi', path: '/supplier/notifications', icon: Bell, badge: unreadCount.value || null },
+          { label: 'Profile', path: '/supplier/profile', icon: ShieldCheck },
+        ],
+      },
+    ];
+  }
+
   return [];
 });
 
@@ -542,6 +564,7 @@ const onSelectRole = (newRoleKey) => {
     WAREHOUSE: '/warehouse/dashboard',
     FINANCE: '/finance/dashboard',
     CLIENT: '/portal',
+    SUPPLIER: '/supplier/portal',
   };
   router.push(targetMap[newRoleKey] || '/marketing/dashboard');
 };

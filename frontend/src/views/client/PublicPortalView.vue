@@ -11,51 +11,6 @@
           </div>
         </div>
 
-        <!-- QUICK TAB SWITCHERS IN HEADER (DESKTOP) -->
-        <nav class="hidden lg:flex items-center gap-1 bg-white/10 p-1 rounded-xl backdrop-blur-xs border border-white/10 text-xs font-semibold">
-          <button
-            type="button"
-            :class="[
-              activeTab === 'request'
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                : 'text-white/90 hover:text-white hover:bg-white/10',
-              'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5'
-            ]"
-            @click="setTab('request')"
-          >
-            <ClipboardCheck class="w-3.5 h-3.5" />
-            <span>Ajukan Kebutuhan</span>
-          </button>
-
-          <button
-            type="button"
-            :class="[
-              activeTab === 'tracking'
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                : 'text-white/90 hover:text-white hover:bg-white/10',
-              'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5'
-            ]"
-            @click="setTab('tracking')"
-          >
-            <Truck class="w-3.5 h-3.5" />
-            <span>Lacak Resi & BAST</span>
-          </button>
-
-          <button
-            type="button"
-            :class="[
-              activeTab === 'payment'
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                : 'text-white/90 hover:text-white hover:bg-white/10',
-              'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5'
-            ]"
-            @click="setTab('payment')"
-          >
-            <CreditCard class="w-3.5 h-3.5" />
-            <span>Pembayaran & Termin</span>
-          </button>
-        </nav>
-
         <div class="flex items-center gap-3">
           <router-link
             to="/login"

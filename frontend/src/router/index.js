@@ -44,6 +44,7 @@ import WarehouseDeliveryNotes from '../views/warehouse/WarehouseDeliveryNotes.vu
 
 // Finance Views
 import FinanceDashboard from '../views/finance/FinanceDashboard.vue';
+import FinanceSuppliers from '../views/finance/FinanceSuppliers.vue';
 import FinanceInvoices from '../views/finance/FinanceInvoices.vue';
 import FinancePayments from '../views/finance/FinancePayments.vue';
 import FinanceReceivables from '../views/finance/FinanceReceivables.vue';
@@ -58,6 +59,7 @@ import ClientOrderRequest from '../views/client/ClientOrderRequest.vue';
 import ClientPayments from '../views/client/ClientPayments.vue';
 import ClientOrderTracking from '../views/client/ClientOrderTracking.vue';
 import PublicPortalView from '../views/client/PublicPortalView.vue';
+import SupplierPortalView from '../views/supplier/SupplierPortalView.vue';
 
 // Common Views
 import NotificationsView from '../views/common/NotificationsView.vue';
@@ -78,6 +80,7 @@ const routes = [
         WAREHOUSE: '/warehouse/dashboard',
         FINANCE: '/finance/dashboard',
         CLIENT: '/portal',
+        SUPPLIER: '/supplier/portal',
       };
       return roleMap[role] || '/marketing/dashboard';
     },
@@ -336,6 +339,12 @@ const routes = [
     meta: { title: 'Dashboard Finance', role: 'FINANCE', requiresAuth: true },
   },
   {
+    path: '/finance/suppliers',
+    name: 'finance-suppliers',
+    component: FinanceSuppliers,
+    meta: { title: 'Data Supplier', role: 'FINANCE', requiresAuth: true },
+  },
+  {
     path: '/finance/purchases',
     name: 'finance-purchases',
     component: FinancePurchases,
@@ -448,6 +457,40 @@ const routes = [
   {
     path: '/tracking',
     redirect: { path: '/portal', query: { tab: 'tracking' } },
+  },
+
+  // 8. SUPPLIER / PORTAL VENDOR (PORTAL REKANAN PENGADAAN & DISTRIBUTOR)
+  {
+    path: '/supplier',
+    redirect: '/supplier/portal',
+  },
+  {
+    path: '/supplier/dashboard',
+    redirect: '/supplier/portal',
+  },
+  {
+    path: '/supplier/orders',
+    redirect: { path: '/supplier/portal', query: { tab: 'orders' } },
+  },
+  {
+    path: '/supplier/shipments',
+    redirect: { path: '/supplier/portal', query: { tab: 'shipments' } },
+  },
+  {
+    path: '/supplier/notifications',
+    name: 'supplier-notifications',
+    component: NotificationsView,
+    meta: { title: 'Notifikasi Supplier', role: 'SUPPLIER', requiresAuth: true },
+  },
+  {
+    path: '/supplier/profile',
+    redirect: { path: '/supplier/portal', query: { tab: 'profile' } },
+  },
+  {
+    path: '/supplier/portal',
+    name: 'supplier-portal',
+    component: SupplierPortalView,
+    meta: { title: 'Portal Vendor & Supplier Rekanan — CV Alpharo Artha Jaya', role: 'SUPPLIER' },
   },
 
   // Catch-all route

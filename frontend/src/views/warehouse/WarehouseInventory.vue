@@ -50,7 +50,7 @@
             <tr v-for="m in store.stockMovements" :key="m.id" class="hover:bg-slate-50/70 transition-colors">
               <td class="py-3.5 px-4 text-slate-500 whitespace-nowrap">{{ m.date }}</td>
               <td class="py-3.5 px-4">
-                <span class="font-bold text-slate-900 block">{{ m.name }}</span>
+                <span class="font-bold text-slate-900 block">{{ m.productName || m.name }}</span>
                 <span class="font-mono text-[10px] text-slate-400">{{ m.sku }}</span>
               </td>
               <td class="py-3.5 px-4 text-center">
