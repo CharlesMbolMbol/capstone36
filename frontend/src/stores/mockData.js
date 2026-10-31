@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue';
-import { WILAYAH_DKI } from '../data/wilayahDki';
+import { WILAYAH_DKI } from '../data/wilayahDki.js';
 
 const STORAGE_KEY = 'alpharo_integrated_system_v1';
 
@@ -1350,7 +1350,7 @@ export const storeActions = {
     return newOrder;
   },
 
-  getOrderStockReadiness(items) {
+  getOrderStockReadiness(items, excludeOrderNumber = null) {
     const requiredByProduct = new Map();
     let incomplete = !Array.isArray(items) || items.length === 0;
 
@@ -1366,15 +1366,22 @@ export const storeActions = {
       requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
     }
 
+    const availableByProduct = {};
     const shortages = [...requiredByProduct].flatMap(([productId, required]) => {
       const product = store.products.find((candidate) => candidate.id === productId);
-      const available = Number(product?.stock) || 0;
+      const reserved = store.warehouseFulfillments
+        .filter((fulfillment) => fulfillment.status === 'Diproses' && fulfillment.orderNumber !== excludeOrderNumber)
+        .flatMap((fulfillment) => fulfillment.items)
+        .filter((item) => item.productId === productId || item.sku === product?.sku)
+        .reduce((sum, item) => sum + Number(item.reqQty || 0), 0);
+      const available = Math.max(0, (Number(product?.stock) || 0) - reserved);
+      availableByProduct[productId] = available;
       return required > available
         ? [{ name: product.name, available, required, unit: product.unit }]
         : [];
     });
 
-    return { ready: !incomplete && shortages.length === 0, incomplete, shortages };
+    return { ready: !incomplete && shortages.length === 0, incomplete, shortages, availableByProduct };
   },
 
   updateDraftOrder(orderId, orderData) {
@@ -1453,47 +1460,58 @@ export const storeActions = {
   // Direktur Verification & Approval Actions
   approveOrder(orderId, notes = '') {
     const order = store.orders.find((o) => o.id === orderId);
-    if (order) {
-      order.status = 'Disetujui';
-      order.approvedBy = store.currentUser.name;
-      order.approvalDate = new Date().toLocaleString('id-ID');
-      order.approvalNotes = notes || 'Disetujui oleh Direktur.';
-      
-      order.timeline.push({
-        stage: 'Disetujui Direktur',
-        user: store.currentUser.name,
-        timestamp: new Date().toLocaleString('id-ID'),
-        status: 'completed',
-        notes: notes || 'Disetujui penuh untuk eksekusi dokumen dan persiapan barang.',
-      });
+    if (!order || order.status !== 'Menunggu Verifikasi' || order.isHold) return false;
+    const readiness = this.getOrderStockReadiness(order.items);
+    if (!readiness.ready) return false;
 
-      // Notify Administrasi & Warehouse & Marketing
-      this.addNotification('MARKETING', 'Order Disetujui Direktur', `Order ${order.orderNumber} telah disetujui oleh Direktur.`, 'order', '/marketing/orders');
-      this.addNotification('ADMINISTRASI', 'Order Baru Disetujui', `Order ${order.orderNumber} siap untuk penerbitan PO, Surat Jalan, dan BAST.`, 'document', '/administration/spj');
-      this.addNotification('WAREHOUSE', 'Order Masuk Antrean Gudang', `Order ${order.orderNumber} membutuhkan persiapan & pengecekan stok barang.`, 'warehouse', '/warehouse/fulfillment');
+    order.status = 'Disetujui';
+    order.approvedBy = store.currentUser.name;
+    order.approvalDate = new Date().toLocaleString('id-ID');
+    order.approvalNotes = notes || 'Disetujui oleh Direktur.';
 
-      // Create warehouse fulfillment queue if not exist
-      if (!store.warehouseFulfillments.some((wf) => wf.orderNumber === order.orderNumber)) {
-        store.warehouseFulfillments.unshift({
-          id: Date.now(),
-          orderNumber: order.orderNumber,
-          clientName: order.clientName,
-          items: order.items.map((it) => ({
-            sku: it.sku,
-            name: it.name,
-            reqQty: it.qty,
-            availQty: 250,
-            fulfilledQty: it.qty,
-            unit: it.unit,
-          })),
-          status: 'Diproses',
-          checkedBy: '-',
-          notes: 'Menunggu alokasi dan packing tim gudang.',
+    order.timeline.push({
+      stage: 'Disetujui Direktur',
+      user: store.currentUser.name,
+      timestamp: new Date().toLocaleString('id-ID'),
+      status: 'completed',
+      notes: notes || 'Disetujui penuh untuk eksekusi dokumen dan persiapan barang.',
+    });
+
+    this.addNotification('MARKETING', 'Order Disetujui Direktur', `Order ${order.orderNumber} telah disetujui oleh Direktur.`, 'order', '/marketing/orders');
+    this.addNotification('ADMINISTRASI', 'Order Baru Disetujui', `Order ${order.orderNumber} siap untuk penerbitan PO, Surat Jalan, dan BAST.`, 'document', '/administration/spj');
+    this.addNotification('WAREHOUSE', 'Order Masuk Antrean Gudang', `Order ${order.orderNumber} membutuhkan persiapan & pengecekan stok barang.`, 'warehouse', '/warehouse/fulfillment');
+
+    const itemsBySku = new Map();
+    for (const item of order.items) {
+      const existing = itemsBySku.get(item.sku);
+      if (existing) {
+        existing.reqQty += Number(item.qty);
+      } else {
+        const product = store.products.find((candidate) => candidate.id === Number(item.productId));
+        itemsBySku.set(item.sku, {
+          productId: Number(item.productId),
+          sku: item.sku,
+          name: item.name,
+          reqQty: Number(item.qty),
+          availQty: readiness.availableByProduct[item.productId] ?? (Number(product?.stock) || 0),
+          fulfilledQty: 0,
+          unit: item.unit,
         });
       }
-
-      this.addActivityLog('Menyetujui Order', order.orderNumber, `Catatan: ${notes || 'Tanpa catatan khusus'}`);
     }
+
+    store.warehouseFulfillments.unshift({
+      id: Date.now(),
+      orderNumber: order.orderNumber,
+      clientName: order.clientName,
+      items: [...itemsBySku.values()],
+      status: 'Diproses',
+      checkedBy: '-',
+      notes: 'Menunggu alokasi dan packing tim gudang.',
+    });
+
+    this.addActivityLog('Menyetujui Order', order.orderNumber, `Catatan: ${notes || 'Tanpa catatan khusus'}`);
+    return true;
   },
 
   rejectOrder(orderId, reason) {
@@ -1669,18 +1687,35 @@ export const storeActions = {
   // Warehouse Actions
   confirmFulfillment(fulfillmentId) {
     const item = store.warehouseFulfillments.find((f) => f.id === fulfillmentId);
-    if (item) {
-      item.status = 'Siap Dikirim';
-      item.checkedBy = store.currentUser.name;
+    if (!item || item.status !== 'Diproses') return false;
+    const order = store.orders.find((o) => o.orderNumber === item.orderNumber);
+    if (!order || order.isHold) return false;
+    if (!this.getOrderStockReadiness(order.items, item.orderNumber).ready) return false;
 
-      const order = store.orders.find((o) => o.orderNumber === item.orderNumber);
-      if (order) {
-        order.fulfillmentStatus = 'Siap Dikirim';
-      }
-
-      this.addActivityLog('Konfirmasi Pemenuhan Barang', item.orderNumber, 'Semua item siap dikirim di Loading Dock.');
-      this.addNotification('ADMINISTRASI', 'Barang Siap Dikirim', `Order ${item.orderNumber} telah siap dikirim oleh Gudang.`, 'warehouse', '/administration/delivery-notes');
+    const quantitiesBySku = new Map();
+    for (const fulfillmentItem of item.items) {
+      quantitiesBySku.set(
+        fulfillmentItem.sku,
+        (quantitiesBySku.get(fulfillmentItem.sku) || 0) + Number(fulfillmentItem.reqQty)
+      );
+      fulfillmentItem.fulfilledQty = Number(fulfillmentItem.reqQty);
     }
+
+    for (const [sku, qty] of quantitiesBySku) {
+      this.addStockMovement({ sku, type: 'Keluar', qty, reference: item.orderNumber });
+    }
+
+    item.status = 'Siap Dikirim';
+    item.checkedBy = store.currentUser.name;
+    for (const fulfillmentItem of item.items) {
+      const product = store.products.find((candidate) => candidate.sku === fulfillmentItem.sku);
+      fulfillmentItem.availQty = Number(product?.stock) || 0;
+    }
+    order.fulfillmentStatus = 'Siap Dikirim';
+
+    this.addActivityLog('Konfirmasi Pemenuhan Barang', item.orderNumber, 'Semua item siap dikirim di Loading Dock.');
+    this.addNotification('ADMINISTRASI', 'Barang Siap Dikirim', `Order ${item.orderNumber} telah siap dikirim oleh Gudang.`, 'warehouse', '/administration/delivery-notes');
+    return true;
   },
 
   createShipment(shipmentData) {
