@@ -1269,6 +1269,10 @@ export const storeActions = {
   },
 
   createOrder(orderData) {
+    if (orderData.submitDirectly && !this.getOrderStockReadiness(orderData.items).ready) {
+      return null;
+    }
+
     const nextId = store.orders.length ? Math.max(...store.orders.map((o) => o.id)) + 1 : 1;
     const orderNumber = `ORD-2026-${String(nextId).padStart(3, '0')}`;
     const client = store.clients.find((c) => c.id === Number(orderData.clientId)) || { name: 'Client Umum' };
@@ -1346,6 +1350,33 @@ export const storeActions = {
     return newOrder;
   },
 
+  getOrderStockReadiness(items) {
+    const requiredByProduct = new Map();
+    let incomplete = !Array.isArray(items) || items.length === 0;
+
+    for (const item of Array.isArray(items) ? items : []) {
+      const productId = Number(item.productId);
+      const qty = Number(item.qty);
+      const product = store.products.find((candidate) => candidate.id === productId);
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isFinite(qty) || qty <= 0 || !product) {
+        incomplete = true;
+        continue;
+      }
+
+      requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
+    }
+
+    const shortages = [...requiredByProduct].flatMap(([productId, required]) => {
+      const product = store.products.find((candidate) => candidate.id === productId);
+      const available = Number(product?.stock) || 0;
+      return required > available
+        ? [{ name: product.name, available, required, unit: product.unit }]
+        : [];
+    });
+
+    return { ready: !incomplete && shortages.length === 0, incomplete, shortages };
+  },
+
   updateDraftOrder(orderId, orderData) {
     const order = store.orders.find((item) => item.id === Number(orderId));
     const client = store.clients.find((item) => item.id === Number(orderData.clientId));
@@ -1403,7 +1434,7 @@ export const storeActions = {
 
   submitOrderForVerification(orderId) {
     const order = store.orders.find((o) => o.id === orderId);
-    if (order && order.status === 'Draft') {
+    if (order && order.status === 'Draft' && this.getOrderStockReadiness(order.items).ready) {
       order.status = 'Menunggu Verifikasi';
       order.timeline.push({
         stage: 'Menunggu Verifikasi',
@@ -1414,7 +1445,9 @@ export const storeActions = {
       });
       this.addNotification('DIREKTUR', 'Order Menunggu Verifikasi', `Order ${order.orderNumber} dari ${order.clientName} menunggu verifikasi Anda.`, 'approval', '/director/verification');
       this.addActivityLog('Mengajukan Verifikasi Order', order.orderNumber, 'Status berubah dari Draft ke Menunggu Verifikasi.');
+      return true;
     }
+    return false;
   },
 
   // Direktur Verification & Approval Actions

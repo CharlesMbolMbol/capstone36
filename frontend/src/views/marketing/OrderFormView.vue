@@ -464,6 +464,15 @@
               <p class="text-[11px] text-slate-500">
                 {{ form.items.length }} item barang terdaftar &bull; Subtotal: Rp {{ calculatedItemsTotal.toLocaleString('id-ID') }} &bull; Total dengan PPN: Rp {{ calculatedOrderTotal.toLocaleString('id-ID') }}
               </p>
+              <p
+                :class="[
+                  'mt-1 text-[11px] font-semibold',
+                  stockReadiness.status === 'ready' ? 'text-emerald-700' : stockReadiness.status === 'shortage' ? 'text-amber-700' : 'text-slate-500',
+                ]"
+              >
+                {{ stockReadiness.title }}
+                <span v-if="stockReadiness.shortages.length"> — {{ stockReadiness.shortages.map((item) => `${item.name}: kurang ${item.required - item.available} ${item.unit}`).join(', ') }}</span>
+              </p>
             </div>
           </div>
           <ChevronDown :class="[showItemsSection ? 'rotate-180' : '', 'w-4 h-4 text-slate-500 transition-transform']" />
@@ -482,6 +491,28 @@
               <Plus class="w-3.5 h-3.5" />
               <span>Tambah Baris Barang</span>
             </button>
+          </div>
+
+          <div
+            role="status"
+            aria-live="polite"
+            :class="[
+              'rounded-lg border px-3.5 py-3 text-xs',
+              stockReadiness.status === 'ready'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : stockReadiness.status === 'shortage'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-slate-200 bg-slate-50 text-slate-600',
+            ]"
+          >
+            <p class="font-bold">{{ stockReadiness.title }}</p>
+            <p class="mt-1">{{ stockReadiness.message }}</p>
+            <p v-if="stockReadiness.shortages.length" class="mt-1">
+              Stok kurang: {{ stockReadiness.shortages.map((item) => `${item.name} (kurang ${item.required - item.available} ${item.unit})`).join(', ') }}.
+            </p>
+            <p v-if="stockReadiness.status === 'shortage'" class="mt-1 font-semibold">
+              Draft tetap bisa disimpan, tetapi belum bisa diajukan untuk approval.
+            </p>
           </div>
 
           <div class="overflow-x-auto">
@@ -509,6 +540,24 @@
                         [{{ p.sku }}] {{ p.name }} (Stok: {{ p.stock }} {{ p.unit }})
                       </option>
                     </select>
+                    <div v-if="stockByItem[idx]" class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span class="text-[11px] text-slate-500">
+                        Stok {{ stockByItem[idx].available }} {{ stockByItem[idx].unit }}
+                        &bull; Kebutuhan {{ stockByItem[idx].required }} {{ stockByItem[idx].unit }}
+                      </span>
+                      <span
+                        :class="[
+                          'rounded px-1.5 py-0.5 text-[10px] font-bold',
+                          stockByItem[idx].sufficient
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : stockByItem[idx].available > 0
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-rose-100 text-rose-700',
+                        ]"
+                      >
+                        {{ stockByItem[idx].sufficient ? 'Stok Cukup' : stockByItem[idx].available > 0 ? 'Stok Kurang' : 'Stok Habis' }}
+                      </span>
+                    </div>
                   </td>
                   <td class="py-2.5 px-3">
                     <input
@@ -812,6 +861,58 @@ const calculatedItemsTotal = computed(() => {
 const calculatedItemsTax = computed(() => Math.round(calculatedItemsTotal.value * 0.11));
 const calculatedOrderTotal = computed(() => calculatedItemsTotal.value + calculatedItemsTax.value);
 
+const stockByItem = computed(() => {
+  const requiredByProduct = new Map();
+  for (const item of form.value.items) {
+    const productId = Number(item.productId);
+    if (item.productId && Number.isFinite(productId)) {
+      requiredByProduct.set(
+        productId,
+        (requiredByProduct.get(productId) || 0) + (Number(item.qty) || 0)
+      );
+    }
+  }
+
+  return form.value.items.map((item) => {
+    const product = store.products.find((candidate) => candidate.id === Number(item.productId));
+    if (!product) return null;
+
+    const required = requiredByProduct.get(product.id) || 0;
+    return {
+      available: Number(product.stock) || 0,
+      required,
+      unit: product.unit,
+      sufficient: required > 0 && required <= (Number(product.stock) || 0),
+    };
+  });
+});
+
+const stockReadiness = computed(() => {
+  const readiness = storeActions.getOrderStockReadiness(form.value.items);
+  if (readiness.shortages.length) {
+    return {
+      status: 'shortage',
+      title: 'Stok belum mencukupi',
+      message: 'Tinjau jumlah barang atau koordinasikan pemenuhan dengan Gudang sebelum mengajukan approval.',
+      shortages: readiness.shortages,
+    };
+  }
+  if (!readiness.ready) {
+    return {
+      status: 'incomplete',
+      title: 'Rincian stok belum lengkap',
+      message: 'Pilih barang dan masukkan jumlah untuk melihat kesiapan stok pengajuan.',
+      shortages: readiness.shortages,
+    };
+  }
+  return {
+    status: 'ready',
+    title: 'Stok mencukupi — siap diajukan untuk approval',
+    message: 'Stok saat ini mencukupi seluruh kebutuhan barang pada order.',
+    shortages: readiness.shortages,
+  };
+});
+
 const onNilaiProjectInput = (event) => {
   if (isEdit.value) return;
   form.value.nilaiProject = Number(event.target.value) || 0;
@@ -968,6 +1069,7 @@ onMounted(() => {
     // Set default company to CV Alpharo Artha Jaya to generate previews nicely
     form.value.company = 'CV Alpharo Artha Jaya';
     updateDocNumbers();
+    showItemsSection.value = true;
   }
 });
 
