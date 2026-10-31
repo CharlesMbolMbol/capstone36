@@ -1346,6 +1346,52 @@ export const storeActions = {
     return newOrder;
   },
 
+  updateDraftOrder(orderId, orderData) {
+    const order = store.orders.find((item) => item.id === Number(orderId));
+    const client = store.clients.find((item) => item.id === Number(orderData.clientId));
+    if (!order || order.status !== 'Draft' || !client) return null;
+
+    const items = orderData.items.map((item) => {
+      const qty = Number(item.qty);
+      const price = Number(item.price);
+      return {
+        ...item,
+        productId: Number(item.productId),
+        qty,
+        price,
+        total: qty * price,
+      };
+    });
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    const tax = Math.round(subtotal * 0.11);
+    const grandTotal = subtotal + tax;
+
+    Object.assign(order, {
+      ...orderData,
+      id: order.id,
+      orderNumber: order.orderNumber,
+      clientId: client.id,
+      clientName: client.name,
+      projectName: orderData.projectName,
+      date: orderData.date || order.date,
+      submittedBy: order.submittedBy,
+      status: 'Draft',
+      items,
+      subtotal,
+      tax,
+      grandTotal,
+      nilaiProject: grandTotal,
+      nilaiInvoice: grandTotal,
+    });
+
+    this.addActivityLog(
+      'Memperbarui Draft Order',
+      order.orderNumber,
+      `Rincian dan harga final diperbarui menjadi Rp ${grandTotal.toLocaleString('id-ID')}.`
+    );
+    return order;
+  },
+
   deleteOrder(orderId) {
     const idx = store.orders.findIndex((o) => o.id === orderId);
     if (idx !== -1) {
